@@ -5,10 +5,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies        #-}
 {-# LANGUAGE TypeOperators       #-}
+{-# LANGUAGE DeriveGeneric       #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Servant.PYSpec where
 
+import           Data.Aeson
 import           Data.Monoid                                ()
 import           Data.Proxy()
 import           Data.Text                                  (Text)
@@ -16,6 +18,9 @@ import qualified Data.Text                                  as T
 import           GHC.TypeLits()
 import           Prelude                                    ()
 import           Prelude.Compat
+import           Data.Proxy
+import           GHC.Generics
+import qualified Data.ByteString.Char8                      as B
 import           Test.Hspec                                 hiding
                                                              (shouldContain,
                                                              shouldNotContain)
@@ -25,9 +30,11 @@ import           Test.QuickCheck                            (Arbitrary (..),
 
 import           Servant.API.ContentTypes()
 import           Servant.API.Internal.Test.ComprehensiveAPI()
+import           Servant.Foreign
 
 import           Servant.PY.Internal
-
+import           Servant.PY.Requests
+import           Servant.PY
 
 customOptions :: CommonGeneratorOptions
 customOptions = defCommonGeneratorOptions
@@ -53,7 +60,27 @@ instance Arbitrary ASCII where
    shrink xs = (ASCII . T.pack) <$> shrink (T.unpack $ getASCII xs)
 
 
+type OctetStreamTestApi = "upload-octet-stream"
+                          :> ReqBody '[OctetStream] B.ByteString
+                          :> Post '[JSON] SomeJson
+octetStreamTestApi :: Proxy OctetStreamTestApi
+octetStreamTestApi = Proxy
+
+data SomeJson = SomeJson
+ { uvalue       :: !T.Text
+ , pvalue       :: !T.Text
+ , otherMissing :: Maybe T.Text
+ } deriving (Eq, Show, Generic)
+instance ToJSON SomeJson
+
+
 internalSpec :: Spec
 internalSpec = describe "Internal" $ do
+  describe "indenter" $ do
     it "should only indent using whitespace" $
       property $ \n -> indenter n indent == mconcat (replicate n (T.pack " "))
+
+
+  describe "pyForAPI" $ do
+    it "should work with OctetStream" $ do
+      pyForAPI octetStreamTestApi requests
